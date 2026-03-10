@@ -26,6 +26,9 @@
                    | combine(quayBackendRGWDefaults)
                    | combine(quayBackendRGWConfiguration))
                    if quayBackend == 'RadosGWStorage'
+                   else (quayBackendDefaults
+                   | combine(quayBackendLocalStorageConfiguration | default({})))
+                   if quayBackend == 'LocalStorage'
                    else quayBackendDefaults)
                    | to_yaml }}
           DISTRIBUTED_STORAGE_DEFAULT_LOCATIONS:
@@ -61,7 +64,7 @@
   delay: "{{ k8s_delay }}"
   until: r_quay_config_secret is success
 
-- name: Ensure QuayRegistry is present
+- name: Ensure QuayRegistry is present (ODF Backend)
   kubernetes.core.k8s:
     state: present
     definition:
@@ -107,12 +110,15 @@
               requests:
                 cpu: 500m
                 memory: 2Gi
-
+  when: blockStorageBackend == 'odf'
   retries: 60
   delay: 10
   register: r_quay
   until: r_quay is succeeded
 
+- name: Run LVMS-specific Quay tasks (PVC, QuayRegistry, deployment patch)
+  ansible.builtin.include_tasks: quay_lvms.yaml
+  when: blockStorageBackend == 'lvms' and quayBackend == 'LocalStorage'
 
 - name: Get router pod IP for Quay route access
   kubernetes.core.k8s_info:
